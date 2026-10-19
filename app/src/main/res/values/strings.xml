@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">Gemini Mobile AI</string>
+    <string name="assistant_title">Gemini Mobile AI</string>
+    <string name="assistant_tagline">Assistente Autônomo com Controle do Sistema</string>
+    <string name="state_idle">Disponível</string>
+    <string name="state_listening">Escutando...</string>
+    <string name="state_interpreting">Interpretando comando...</string>
+    <string name="state_planning">Planejando ações...</string>
+    <string name="state_executing">Executando tarefa...</string>
+    <string name="state_verifying">Verificando resultado...</string>
+    <string name="state_completed">Tarefa concluída</string>
+    <string name="state_error">Falha identificada</string>
+    <string name="state_paused">Pausado</string>
+
+    <string name="voice_input_hint">Fale ou digite um comando...</string>
+    <string name="btn_cancel_task">Interromper Execução</string>
+    <string name="btn_clear_history">Limpar Histórico</string>
+    <string name="btn_start_service">Ativar Segundo Plano</string>
+    <string name="btn_stop_service">Desativar Segundo Plano</string>
+    <string name="btn_open_floating">Abrir Botão Flutuante</string>
+    <string name="btn_accessibility_settings">Configurar Acessibilidade</string>
+
+    <string name="accessibility_service_label">Gemini Mobile AI - Controle e Automação</string>
+    <string name="accessibility_service_description">Permite que o Gemini Mobile AI execute ações autorizadas na tela, como abrir aplicativos, localizar botões e preencher campos sob sua supervisão.</string>
+
+    <string name="notification_channel_name">Serviço do Assistente</string>
+    <string name="notification_channel_desc">Notificações de status do Gemini Mobile AI em segundo plano</string>
+    <string name="notification_title_active">Gemini Mobile AI Ativo</string>
+    <string name="notification_text_active">Pronto para receber comandos de voz e automação</string>
+</resources>

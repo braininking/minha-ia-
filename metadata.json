@@ -1,0 +1,6 @@
+{
+  "name": "Gemini Mobile AI",
+  "description": "Assistente inteligente com controle do celular Android, automação de tarefas e interface futurista",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
