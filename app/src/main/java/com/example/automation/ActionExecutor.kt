@@ -183,43 +183,62 @@ class ActionExecutor(private val context: Context) {
                 }
 
                 ActionType.SEND_WHATSAPP_MESSAGE -> {
-                    val message = step.targetText ?: ""
-                    val contact = step.targetLabel ?: ""
+                    val message = step.targetText?.trim().orEmpty()
+                    val contact = step.targetLabel?.trim().orEmpty()
+                    val expectedPackage = step.targetPackage?.trim().orEmpty()
+                    val service = AppAccessibilityService.getInstance()
 
-                    // Open WhatsApp sharing intent with text pre-filled
-                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, message)
-                        setPackage("com.whatsapp")
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    if (message.isBlank() || contact.isBlank() || expectedPackage != "com.whatsapp") {
+                        val error = "Envio bloqueado: mensagem, contato ou pacote do WhatsApp inválido."
+                        step.status = StepStatus.FAILED
+                        step.resultMessage = error
+                        return@withContext StepExecutionResult.Failure(error)
+                    }
+                    if (service == null) {
+                        val error = "Serviço de Acessibilidade inativo. Não foi possível verificar a conversa antes do envio."
+                        step.status = StepStatus.FAILED
+                        step.resultMessage = error
+                        return@withContext StepExecutionResult.Failure(error)
                     }
 
-                    try {
-                        context.startActivity(sendIntent)
+                    val before = service.getCurrentScreenSummary()
+                    val inWhatsApp = before.packageName.equals(expectedPackage, ignoreCase = true)
+                    val contactVisible = before.visibleTexts.any { it.equals(contact, ignoreCase = true) } ||
+                        before.visibleTexts.any { it.contains(contact, ignoreCase = true) }
+                    val messageVisible = before.visibleTexts.any { it == message } ||
+                        before.visibleTexts.any { it.contains(message) }
+
+                    if (!inWhatsApp || !contactVisible || !messageVisible) {
+                        val error = "Envio bloqueado: não consegui confirmar que a conversa de '$contact' está aberta e que o texto completo está preparado. Nenhuma mensagem foi enviada."
+                        step.status = StepStatus.FAILED
+                        step.resultMessage = error
+                        return@withContext StepExecutionResult.Failure(error)
+                    }
+
+                    // Only tap the visible WhatsApp send control after validating app, recipient, and draft.
+                    val clicked = service.clickElementByText("Enviar") || service.clickElementByText("Send")
+                    if (!clicked) {
+                        val error = "Não encontrei o botão de envio do WhatsApp. A mensagem não foi enviada."
+                        step.status = StepStatus.FAILED
+                        step.resultMessage = error
+                        return@withContext StepExecutionResult.Failure(error)
+                    }
+
+                    delay(900)
+                    val after = service.getCurrentScreenSummary()
+                    val stillInWhatsApp = after.packageName.equals(expectedPackage, ignoreCase = true)
+                    val messageInConversation = after.visibleTexts.any { it == message } ||
+                        after.visibleTexts.any { it.contains(message) }
+                    if (stillInWhatsApp && messageInConversation) {
                         step.status = StepStatus.COMPLETED
-                        val recipientNote = if (contact.isBlank()) "" else " Contato solicitado: $contact. Selecione e confira esse contato manualmente."
-                        val msg = "Texto preparado no WhatsApp.$recipientNote Confira a conversa e envie manualmente; o assistente não confirma o envio."
+                        val msg = "O WhatsApp aceitou a ação de envio e o texto aparece na conversa de '$contact'. A entrega ao destinatário não foi confirmada."
                         step.resultMessage = msg
                         StepExecutionResult.Success(msg)
-                    } catch (e: Exception) {
-                        // Fallback generic send
-                        val genericIntent = Intent(Intent.ACTION_VIEW).apply {
-                            val encoded = URLEncoder.encode(message, "UTF-8")
-                            data = Uri.parse("https://api.whatsapp.com/send?text=$encoded")
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        try {
-                            context.startActivity(genericIntent)
-                            step.status = StepStatus.COMPLETED
-                            val msg = "Link do WhatsApp aberto com o texto preparado. Confira o destinatário e envie manualmente; o assistente não confirma o envio."
-                            step.resultMessage = msg
-                            StepExecutionResult.Success(msg)
-                        } catch (err: Exception) {
-                            val error = "WhatsApp não está instalado ou disponível neste aparelho."
-                            step.status = StepStatus.FAILED
-                            step.resultMessage = error
-                            StepExecutionResult.Failure(error)
-                        }
+                    } else {
+                        val error = "O botão foi acionado, mas não consegui verificar a mensagem na conversa. Confira o WhatsApp antes de tentar novamente."
+                        step.status = StepStatus.FAILED
+                        step.resultMessage = error
+                        StepExecutionResult.Failure(error)
                     }
                 }
 
