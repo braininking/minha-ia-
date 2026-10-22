@@ -197,7 +197,7 @@ class ActionExecutor(private val context: Context) {
                     try {
                         context.startActivity(sendIntent)
                         step.status = StepStatus.COMPLETED
-                        val recipientNote = if (contact.isBlank()) "" else " Destinatário solicitado: $contact."
+                        val recipientNote = if (contact.isBlank()) "" else " Contato solicitado: $contact. Selecione e confira esse contato manualmente."
                         val msg = "Texto preparado no WhatsApp.$recipientNote Confira a conversa e envie manualmente; o assistente não confirma o envio."
                         step.resultMessage = msg
                         StepExecutionResult.Success(msg)
