@@ -2,10 +2,12 @@ package com.example.ai
 
 import android.util.Log
 import com.example.BuildConfig
+import com.example.model.ActionType
 import com.example.model.ChatMessage
 import com.example.model.InstalledAppInfo
 import com.example.model.ScreenContext
 import com.example.model.TaskPlan
+import com.example.model.TaskStep
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -134,7 +136,115 @@ class GeminiProvider(
         installedApps: List<InstalledAppInfo>,
         screenContext: ScreenContext?
     ): Result<TaskPlan> {
-        // High-level planning with local safety verification
-        return localFallback.planTask(userGoal, installedApps, screenContext)
+        val apiKey = getApiKey()
+        if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
+            return localFallback.planTask(userGoal, installedApps, screenContext)
+        }
+
+        return withContext(Dispatchers.IO) {
+            try {
+                // Send only the active package, not visible screen text that may contain private data.
+                val appCatalog = installedApps
+                    .take(80)
+                    .joinToString("\n") { "- ${it.appName.take(80)} | ${it.packageName}" }
+                val prompt = """
+                    Crie um plano de automação Android para o comando do usuário.
+                    Responda SOMENTE com JSON válido neste formato:
+                    {"steps":[{"actionType":"LAUNCH_APP","description":"...","targetPackage":"...","targetLabel":"...","targetText":"...","targetQuery":"..."}]}
+                    Campos sem uso devem ser omitidos ou ser strings vazias.
+                    Ações permitidas: LAUNCH_APP, OPEN_URL, ACCESSIBILITY_CLICK, ACCESSIBILITY_INPUT,
+                    ACCESSIBILITY_SCROLL, SEND_WHATSAPP_MESSAGE, SEARCH_WEB, WAIT_DELAY, VERIFY_RESULT.
+                    Nunca crie ações fora dessa lista. No WhatsApp, SEND_WHATSAPP_MESSAGE apenas prepara
+                    o texto para revisão manual; não afirme que uma mensagem será enviada automaticamente.
+                    Use somente pacotes da lista de apps quando abrir um aplicativo. Para cliques, use
+                    rótulos exatos e necessários. Não inclua etapas de envio, compra, exclusão, publicação
+                    ou submissão automática. No máximo 25 etapas. Se o comando não puder ser convertido
+                    com segurança, retorne {"steps":[]}.
+
+                    Comando do usuário:
+                    ${userGoal.take(2000)}
+
+                    Pacote da tela atual: ${screenContext?.packageName ?: "desconhecido"}
+
+                    Aplicativos instalados:
+                    ${appCatalog.ifBlank { "Nenhum catálogo de apps disponível." }}
+                """.trimIndent()
+
+                val bodyJson = JSONObject()
+                    .put("contents", JSONArray().put(
+                        JSONObject().put("role", "user").put(
+                            "parts", JSONArray().put(JSONObject().put("text", prompt))
+                        )
+                    ))
+                    .put("generationConfig", JSONObject().put("responseMimeType", "application/json"))
+
+                val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey"
+                val request = Request.Builder()
+                    .url(url)
+                    .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
+                    .build()
+
+                httpClient.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        Log.w("GeminiProvider", "Falha no planejamento Gemini (HTTP ${response.code}); usando motor local.")
+                        return@withContext localFallback.planTask(userGoal, installedApps, screenContext)
+                    }
+
+                    val responseJson = JSONObject(responseBody)
+                    val modelText = responseJson.optJSONArray("candidates")
+                        ?.optJSONObject(0)
+                        ?.optJSONObject("content")
+                        ?.optJSONArray("parts")
+                        ?.optJSONObject(0)
+                        ?.optString("text")
+                        .orEmpty()
+                        .trim()
+                    val cleanJson = modelText
+                        .removePrefix("```json")
+                        .removePrefix("```")
+                        .removeSuffix("```")
+                        .trim()
+                    val stepsJson = JSONObject(cleanJson).optJSONArray("steps")
+                        ?: return@withContext localFallback.planTask(userGoal, installedApps, screenContext)
+
+                    if (stepsJson.length() == 0 || stepsJson.length() > 25) {
+                        return@withContext localFallback.planTask(userGoal, installedApps, screenContext)
+                    }
+
+                    val steps = mutableListOf<TaskStep>()
+                    for (index in 0 until stepsJson.length()) {
+                        val item = stepsJson.optJSONObject(index)
+                            ?: return@withContext localFallback.planTask(userGoal, installedApps, screenContext)
+                        val actionType = runCatching {
+                            ActionType.valueOf(item.optString("actionType").uppercase())
+                        }.getOrNull()
+                            ?: return@withContext localFallback.planTask(userGoal, installedApps, screenContext)
+
+                        fun optionalText(key: String): String? =
+                            item.optString(key).trim().takeIf { it.isNotEmpty() && it != "null" }
+
+                        steps.add(
+                            TaskStep(
+                                index = index,
+                                actionType = actionType,
+                                description = (optionalText("description") ?: actionType.labelPt).take(240),
+                                targetPackage = optionalText("targetPackage")?.take(200),
+                                targetLabel = optionalText("targetLabel")?.take(200),
+                                targetText = optionalText("targetText")?.take(2000),
+                                targetQuery = optionalText("targetQuery")?.take(1000),
+                                // The local AIPlanner replaces this with policy-enforced values.
+                                requiresConfirmation = true
+                            )
+                        )
+                    }
+
+                    Result.success(TaskPlan(goal = userGoal, steps = steps))
+                }
+            } catch (e: Exception) {
+                Log.w("GeminiProvider", "Planejamento Gemini indisponível; usando motor local.", e)
+                localFallback.planTask(userGoal, installedApps, screenContext)
+            }
+        }
     }
 }
