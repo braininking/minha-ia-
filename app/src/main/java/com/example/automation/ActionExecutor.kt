@@ -203,8 +203,7 @@ class ActionExecutor(private val context: Context) {
 
                     val before = service.getCurrentScreenSummary()
                     val inWhatsApp = before.packageName.equals(expectedPackage, ignoreCase = true)
-                    val contactVisible = before.visibleTexts.any { it.equals(contact, ignoreCase = true) } ||
-                        before.visibleTexts.any { it.contains(contact, ignoreCase = true) }
+                    val contactVisible = before.visibleTexts.any { it.equals(contact, ignoreCase = true) }
                     val messageVisible = before.visibleTexts.any { it == message } ||
                         before.visibleTexts.any { it.contains(message) }
 
