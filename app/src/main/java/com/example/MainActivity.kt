@@ -130,10 +130,9 @@ fun MainContent(app: GeminiMobileApp) {
         }
     }
 
-    val isAccessibilityEnabled = AppAccessibilityService.isAccessibilityEnabled(context)
-    // Reading resumeVersion keeps this check fresh after returning from Android Settings.
-    @Suppress("UNUSED_EXPRESSION")
-    resumeVersion
+    val isAccessibilityEnabled = remember(resumeVersion) {
+        AppAccessibilityService.isAccessibilityEnabled(context)
+    }
 
     Scaffold(
         modifier = Modifier
