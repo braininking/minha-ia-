@@ -96,17 +96,8 @@ class LocalIntelligentProvider : AIProvider {
                     requiresConfirmation = false
                 )
             )
-            if (!contact.isNullOrBlank()) {
-                steps.add(
-                    TaskStep(
-                        index = 2,
-                        actionType = ActionType.ACCESSIBILITY_CLICK,
-                        description = "Localizar e abrir conversa com '$contact'",
-                        targetLabel = contact,
-                        requiresConfirmation = false
-                    )
-                )
-            }
+            // Contact selection is left to the user because the generic share intent cannot
+            // reliably target a specific WhatsApp conversation.
             steps.add(
                 TaskStep(
                     index = steps.size,
