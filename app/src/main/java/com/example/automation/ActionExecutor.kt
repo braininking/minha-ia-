@@ -94,7 +94,7 @@ class ActionExecutor(private val context: Context) {
                 }
 
                 ActionType.WAIT_DELAY -> {
-                    val millis = step.targetQuery?.toLongOrNull() ?: 1200L
+                    val millis = (step.targetQuery?.toLongOrNull() ?: 1200L).coerceIn(0L, 10_000L)
                     val checkInterval = 200L
                     var elapsed = 0L
                     while (elapsed < millis) {
@@ -197,7 +197,8 @@ class ActionExecutor(private val context: Context) {
                     try {
                         context.startActivity(sendIntent)
                         step.status = StepStatus.COMPLETED
-                        val msg = "WhatsApp aberto com texto preparado para $contact: \"$message\""
+                        val recipientNote = if (contact.isBlank()) "" else " Destinatário solicitado: $contact."
+                        val msg = "Texto preparado no WhatsApp.$recipientNote Confira a conversa e envie manualmente; o assistente não confirma o envio."
                         step.resultMessage = msg
                         StepExecutionResult.Success(msg)
                     } catch (e: Exception) {
@@ -210,7 +211,7 @@ class ActionExecutor(private val context: Context) {
                         try {
                             context.startActivity(genericIntent)
                             step.status = StepStatus.COMPLETED
-                            val msg = "WhatsApp web intent preparado com sucesso."
+                            val msg = "Link do WhatsApp aberto com o texto preparado. Confira o destinatário e envie manualmente; o assistente não confirma o envio."
                             step.resultMessage = msg
                             StepExecutionResult.Success(msg)
                         } catch (err: Exception) {
@@ -227,21 +228,26 @@ class ActionExecutor(private val context: Context) {
                     val screenInfo = service?.getCurrentScreenSummary()
                     val target = step.targetLabel ?: ""
 
-                    val verified = if (target.isNotBlank() && screenInfo != null) {
+                    val verified = target.isNotBlank() && screenInfo != null && (
                         screenInfo.visibleTexts.any { it.contains(target, ignoreCase = true) } ||
-                                screenInfo.packageName?.contains(target, ignoreCase = true) == true
-                    } else {
-                        true
-                    }
+                            screenInfo.packageName?.contains(target, ignoreCase = true) == true
+                    )
 
-                    step.status = StepStatus.COMPLETED
-                    val msg = if (verified) {
-                        "Verificação concluída: tela respondeu conforme esperado."
+                    if (verified) {
+                        step.status = StepStatus.COMPLETED
+                        val msg = "Verificação concluída: o alvo '$target' foi encontrado na tela atual."
+                        step.resultMessage = msg
+                        StepExecutionResult.Success(msg)
                     } else {
-                        "Verificação visual concluída (alvo '$target' aguardando renderização total)."
+                        val error = if (target.isBlank()) {
+                            "Não foi possível verificar o resultado: nenhum alvo de verificação foi definido."
+                        } else {
+                            "Não foi possível confirmar o alvo '$target' na tela atual. Nenhum sucesso foi presumido."
+                        }
+                        step.status = StepStatus.FAILED
+                        step.resultMessage = error
+                        StepExecutionResult.Failure(error)
                     }
-                    step.resultMessage = msg
-                    StepExecutionResult.Success(msg)
                 }
             }
         } catch (e: CancellationException) {
