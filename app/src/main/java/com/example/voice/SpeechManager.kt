@@ -172,7 +172,15 @@ class SpeechManager(private val context: Context) : TextToSpeech.OnInitListener 
             textToSpeech?.setSpeechRate(rate.coerceIn(0.5f, 2.0f))
             textToSpeech?.setPitch(pitch.coerceIn(0.5f, 2.0f))
             _isSpeaking.value = true
-            textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "gemini_tts_${System.currentTimeMillis()}")
+            val result = textToSpeech?.speak(
+                text,
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "gemini_tts_${System.currentTimeMillis()}"
+            )
+            if (result == TextToSpeech.ERROR) {
+                _isSpeaking.value = false
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Erro ao falar: ${e.message}")
         }
