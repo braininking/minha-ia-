@@ -50,6 +50,40 @@ class GeminiProvider(
         }
     }
 
+    suspend fun testConnection(): Result<String> {
+        val apiKey = getApiKey()
+        if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
+            return Result.failure(IllegalStateException(
+                "Chave Gemini não configurada. Configure GEMINI_API_KEY no Secrets do AI Studio ou em .env."
+            ))
+        }
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url("https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey")
+                    .get()
+                    .build()
+
+                httpClient.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        Result.success("Conexão Gemini confirmada; a chave foi aceita pela API.")
+                    } else {
+                        Log.w("GeminiProvider", "Teste de conexão Gemini falhou (HTTP ${response.code}).")
+                        Result.failure(IllegalStateException(
+                            "Gemini respondeu HTTP ${response.code}. Confira a chave e as permissões da API."
+                        ))
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("GeminiProvider", "Não foi possível testar a conexão Gemini.", e)
+                Result.failure(IllegalStateException(
+                    "Falha de rede ao testar o Gemini: ${e.localizedMessage ?: "conexão indisponível"}"
+                ))
+            }
+        }
+    }
+
     override suspend fun generateChatResponse(
         prompt: String,
         history: List<ChatMessage>
