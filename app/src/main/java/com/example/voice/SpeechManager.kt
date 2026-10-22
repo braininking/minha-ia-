@@ -7,6 +7,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -50,6 +51,19 @@ class SpeechManager(private val context: Context) : TextToSpeech.OnInitListener 
                 // Fallback to default
                 textToSpeech?.setLanguage(Locale.getDefault())
             }
+            textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {
+                    _isSpeaking.value = true
+                }
+
+                override fun onDone(utteranceId: String?) {
+                    _isSpeaking.value = false
+                }
+
+                override fun onError(utteranceId: String?) {
+                    _isSpeaking.value = false
+                }
+            })
             isTtsInitialized = true
             Log.i(TAG, "TextToSpeech inicializado com sucesso.")
         }
