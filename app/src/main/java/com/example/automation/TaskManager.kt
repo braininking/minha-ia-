@@ -12,6 +12,7 @@ import com.example.data.local.AppDatabase
 import com.example.data.local.AuditEntity
 import com.example.data.local.ChatEntity
 import com.example.data.local.TaskEntity
+import com.example.model.ActionType
 import com.example.model.AssistantState
 import com.example.model.AutonomyLevel
 import com.example.model.InstalledAppInfo
@@ -209,15 +210,26 @@ class TaskManager(
             }
         }
 
-        // All steps completed!
+        // All planned steps completed. A prepared WhatsApp share is not proof of delivery.
         plan.status = TaskStatus.COMPLETED
         plan.finishedAt = System.currentTimeMillis()
         _activePlan.value = plan
         _assistantState.value = AssistantState.COMPLETED
-        _lastMessage.value = "Tarefa concluída com sucesso!"
+        val messagePrepared = plan.steps.any { it.actionType == ActionType.SEND_WHATSAPP_MESSAGE }
+        val completionMessage = if (messagePrepared) {
+            "Texto preparado. Confira o destinatário e envie manualmente; o envio não foi confirmado."
+        } else {
+            "Tarefa concluída com sucesso!"
+        }
+        _lastMessage.value = completionMessage
         persistTask(plan)
-        recordAudit("COMPLETED", plan.goal, "Todas as ${plan.steps.size} etapas executadas com êxito", "SUCCESS", plan.id)
-        recordAssistantChat("Tarefa concluída com sucesso! Todas as ${plan.steps.size} etapas foram executadas.", plan.id, "Concluída")
+        val auditMessage = if (messagePrepared) {
+            "Preparação concluída; envio da mensagem não confirmado."
+        } else {
+            "Todas as ${plan.steps.size} etapas executadas com êxito."
+        }
+        recordAudit("COMPLETED", plan.goal, auditMessage, if (messagePrepared) "WARN" else "SUCCESS", plan.id)
+        recordAssistantChat(completionMessage, plan.id, if (messagePrepared) "Texto preparado" else "Concluída")
     }
 
     fun approveStep() {
