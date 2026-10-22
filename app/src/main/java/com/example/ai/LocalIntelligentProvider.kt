@@ -274,15 +274,18 @@ class LocalIntelligentProvider : AIProvider {
             Regex("(?:para|pra)\\s+(.+?)(?=\\s+(?:dizendo|falando)|[,;:]|$)", RegexOption.IGNORE_CASE)
         )
         val match = patterns.firstNotNullOfOrNull { it.find(raw) } ?: return null
-        return match.groupValues.getOrNull(1)?.trim()?.trim('"', '\\'')
-            ?.removeSuffix(" dizendo")?.removeSuffix(" falando")?.takeIf { it.isNotBlank() }
+        val candidate = match.groupValues.getOrNull(1)?.trim().orEmpty()
+        return candidate.removePrefix("\"").removeSuffix("\"")
+            .removePrefix("'").removeSuffix("'")
+            .takeIf { it.isNotBlank() }
     }
 
     private fun normalizeContactAlias(contact: String): String {
-        val clean = contact.trim().trim('"', '\\'')
+        val clean = contact.trim().removePrefix("\"").removeSuffix("\"")
+            .removePrefix("'").removeSuffix("'")
         return when (clean.lowercase(Locale.ROOT)) {
-            "minha mãe", "minha mae", "mamãe", "mamãe", "mamá" -> "Mãe"
-            "meu pai" -> "Pai"
+            "minha mãe", "minha mae", "mamãe", "mae", "mãe", "mamá" -> "Mãe"
+            "meu pai", "pai" -> "Pai"
             else -> clean.replaceFirstChar { it.titlecase(Locale.ROOT) }
         }
     }
@@ -292,7 +295,9 @@ class LocalIntelligentProvider : AIProvider {
         if (!quoted.isNullOrBlank()) return quoted.trim()
         val regex = Regex("(?:dizendo|falando)(?:\\s+que)?\\s*:?\\s*(.+)$", RegexOption.IGNORE_CASE)
         val match = regex.find(raw) ?: return ""
-        return match.groupValues.getOrNull(1)?.trim()?.trim('"', '\\'') ?: ""
+        val candidate = match.groupValues.getOrNull(1)?.trim().orEmpty()
+        return candidate.removePrefix("\"").removeSuffix("\"")
+            .removePrefix("'").removeSuffix("'")
     }
 
     private fun extractSearchQuery(raw: String): String {
