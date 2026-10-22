@@ -170,6 +170,17 @@ class GeminiProvider(
         installedApps: List<InstalledAppInfo>,
         screenContext: ScreenContext?
     ): Result<TaskPlan> {
+        val explicitMessageCommand =
+            Regex("\\b(envie|envia|enviar|mande|manda|mandar|send)\\b", RegexOption.IGNORE_CASE)
+                .containsMatchIn(userGoal) &&
+                (userGoal.contains("whatsapp", ignoreCase = true) ||
+                    userGoal.contains("mensagem", ignoreCase = true))
+        if (explicitMessageCommand) {
+            // Use the deterministic accessibility flow for side-effectful messaging;
+            // Gemini must not invent a shortcut that skips contact/draft verification.
+            return localFallback.planTask(userGoal, installedApps, screenContext)
+        }
+
         val apiKey = getApiKey()
         if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
             return localFallback.planTask(userGoal, installedApps, screenContext)
@@ -188,8 +199,8 @@ class GeminiProvider(
                     Campos sem uso devem ser omitidos ou ser strings vazias.
                     Ações permitidas: LAUNCH_APP, OPEN_URL, ACCESSIBILITY_CLICK, ACCESSIBILITY_INPUT,
                     ACCESSIBILITY_SCROLL, SEND_WHATSAPP_MESSAGE, SEARCH_WEB, WAIT_DELAY, VERIFY_RESULT.
-                    Nunca crie ações fora dessa lista. No WhatsApp, SEND_WHATSAPP_MESSAGE apenas prepara
-                    o texto para revisão manual; não afirme que uma mensagem será enviada automaticamente.
+                    Nunca crie ações fora dessa lista. Para mensagens do WhatsApp, use o fluxo local
+                    determinístico; não tente enviar por intents genéricos nem invente confirmação de entrega.
                     Use somente pacotes da lista de apps quando abrir um aplicativo. Para cliques, use
                     rótulos exatos e necessários. Não inclua etapas de envio, compra, exclusão, publicação
                     ou submissão automática. No máximo 25 etapas. Se o comando não puder ser convertido
