@@ -11,7 +11,11 @@ Casos de teste cobertos:
 - Verificação do nome e integridade dos recursos (`readStringFromContext`).
 - Planejamento de tarefas de busca e abertura do Chrome em português (`testLocalAIPlannerForChromeSearch`).
 - Planejamento de mensagens no WhatsApp com retenção de aprovação no modo Equilibrado (`testWhatsAppPlanningWithAutonomySafety`).
-- Política de Autonomia Conservadora forçando autorização em todas as ações (`testConservativeAutonomyRequiresConfirmationForAllActionSteps`).
+- Política de Autonomia Conservadora forçando autorização em ações relevantes (`testConservativeAutonomyRequiresConfirmationForAllActionSteps`).
+- Confirmação obrigatória para cliques e preenchimento no modo Equilibrado (`balancedAutonomyRequiresApprovalForPotentiallySensitiveUiActions`).
+- O modo Avançado não pode remover a confirmação de mensagens (`advancedAutonomyCannotBypassSensitiveActionConfirmations`).
+- Bloqueio de ações sem destino obrigatório (`plannerRejectsLaunchWithoutPackage`).
+- O planejamento local do WhatsApp não presume que a mensagem foi entregue (`localWhatsAppPlanDoesNotClaimItCanVerifyMessageDelivery`).
 
 ## 2. Roteiro de Testes Manuais no Dispositivo Real (ex: Samsung Galaxy A72)
 
@@ -26,8 +30,9 @@ Casos de teste cobertos:
    - Verificar a sequência de etapas no card de tarefas e a exibição da busca no navegador.
 4. **Envio de Mensagem no WhatsApp:**
    - Digitar: "Mande uma mensagem para o Marcos dizendo que chegarei às 18 horas".
-   - Confirmar que o assistente pausa no modo Equilibrado exibindo o botão "Autorizar".
-   - Clicar em "Autorizar" e verificar o direcionamento ao WhatsApp com o texto preparado.
+   - Confirmar que o assistente pausa antes de preparar a mensagem.
+   - Clicar em "Autorizar" e verificar que o WhatsApp abre com o texto preparado.
+   - Confirmar manualmente o destinatário e o envio; o app não deve afirmar que a mensagem foi entregue.
 5. **Cancelamento:**
    - Iniciar qualquer tarefa e clicar em "Interromper Tarefa".
    - Confirmar que a execução é abortada imediatamente.
