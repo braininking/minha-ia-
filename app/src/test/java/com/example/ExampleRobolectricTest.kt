@@ -57,11 +57,12 @@ class ExampleRobolectricTest {
         assertTrue(rawResult.isSuccess)
         val rawPlan = rawResult.getOrThrow()
 
-        // Test Equilibrado autonomy: WhatsApp send requires confirmation
+        // A clear spoken send command authorizes the final action; the executor still
+        // verifies the exact conversation and the complete draft before tapping Send.
         val validated = planner.validateAndApplyPolicy(rawPlan, AutonomyLevel.EQUILIBRADO).getOrThrow()
         val sendStep = validated.steps.firstOrNull { it.actionType == ActionType.SEND_WHATSAPP_MESSAGE }
         assertNotNull(sendStep)
-        assertTrue("No modo equilibrado o envio de mensagem deve exigir confirmação", sendStep!!.requiresConfirmation)
+        assertFalse("O comando falado explícito deve permitir envio automático após as verificações", sendStep!!.requiresConfirmation)
     }
 
     @Test
@@ -152,11 +153,29 @@ class ExampleRobolectricTest {
         ).getOrThrow()
 
         assertTrue(plan.steps.any { it.actionType == ActionType.SEND_WHATSAPP_MESSAGE })
-        assertFalse(plan.steps.any { it.actionType == ActionType.ACCESSIBILITY_CLICK })
+        assertTrue(plan.steps.any { it.actionType == ActionType.ACCESSIBILITY_CLICK })
+        assertTrue(plan.steps.any { it.actionType == ActionType.ACCESSIBILITY_INPUT })
         assertFalse(plan.steps.any {
             it.actionType == ActionType.VERIFY_RESULT &&
                 it.targetLabel == "Status WhatsApp"
         })
+    }
+
+    @Test
+    fun parsesNaturalPortugueseWhatsAppCommandForMother() = runBlocking {
+        val provider = LocalIntelligentProvider()
+        val plan = provider.planTask(
+            "Abra o WhatsApp e envie mensagem pra minha mãe, falando: \"Oi mãe, tudo bom?\"",
+            listOf(InstalledAppInfo("WhatsApp", "com.whatsapp")),
+            null
+        ).getOrThrow()
+
+        val search = plan.steps.first { it.actionType == ActionType.ACCESSIBILITY_INPUT }
+        val message = plan.steps.first { it.actionType == ActionType.SEND_WHATSAPP_MESSAGE }
+        assertEquals("Mãe", search.targetText)
+        assertEquals("Mãe", message.targetLabel)
+        assertEquals("Oi mãe, tudo bom?", message.targetText)
+        assertEquals(ActionType.SEND_WHATSAPP_MESSAGE, plan.steps.last().actionType)
     }
 
 }
