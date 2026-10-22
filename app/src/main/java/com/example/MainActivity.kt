@@ -27,15 +27,21 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.accessibility.AppAccessibilityService
@@ -86,6 +92,18 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainContent(app: GeminiMobileApp) {
     var currentScreen by remember { mutableStateOf(NavDestination.HOME) }
+    var resumeVersion by remember { mutableIntStateOf(0) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) resumeVersion++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val assistantState by app.taskManager.assistantState.collectAsState()
     val activeProviderName by app.settingsRepository.aiProviderFlow.collectAsState(initial = "LOCAL_INTELLIGENT")
 
@@ -112,7 +130,10 @@ fun MainContent(app: GeminiMobileApp) {
         }
     }
 
-    val isAccessibilityEnabled = AppAccessibilityService.isServiceRunning()
+    val isAccessibilityEnabled = AppAccessibilityService.isAccessibilityEnabled(context)
+    // Reading resumeVersion keeps this check fresh after returning from Android Settings.
+    @Suppress("UNUSED_EXPRESSION")
+    resumeVersion
 
     Scaffold(
         modifier = Modifier
