@@ -64,6 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.accessibility.AppAccessibilityService
+import com.example.ai.GeminiProvider
 import com.example.data.SettingsRepository
 import com.example.data.local.AppDatabase
 import com.example.model.AutonomyLevel
@@ -173,10 +174,17 @@ fun SettingsScreen(
 
                 Button(
                     onClick = {
-                        connectionTestResult = if (aiProvider == "GEMINI_API") {
-                            "Conexão Gemini verificada. Operando com fallback seguro para Motor Local."
+                        if (aiProvider == "GEMINI_API") {
+                            connectionTestResult = "Testando conexão Gemini..."
+                            scope.launch {
+                                val result = GeminiProvider().testConnection()
+                                connectionTestResult = result.fold(
+                                    onSuccess = { it },
+                                    onFailure = { "Falha no Gemini: ${it.message ?: "erro desconhecido"}" }
+                                )
+                            }
                         } else {
-                            "Motor Local Inteligente 100% operacional no dispositivo."
+                            connectionTestResult = "Motor Local selecionado. Ele não depende de internet nem de chave de API."
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -191,7 +199,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = connectionTestResult ?: "",
-                        color = EmeraldGreen,
+                        color = if (connectionTestResult?.startsWith("Falha") == true) ErrorRed else EmeraldGreen,
                         fontSize = 12.sp,
                         lineHeight = 16.sp
                     )
