@@ -119,9 +119,9 @@ fun SettingsScreen(
     val floatingBubbleEnabled by settingsRepository.floatingBubbleFlow.collectAsState(initial = false)
 
     var connectionTestResult by remember { mutableStateOf<String?>(null) }
-    val isAccessibilityActive = AppAccessibilityService.isAccessibilityEnabled(context)
-    @Suppress("UNUSED_EXPRESSION")
-    resumeVersion
+    val isAccessibilityActive = remember(resumeVersion) {
+        AppAccessibilityService.isAccessibilityEnabled(context)
+    }
 
     LazyColumn(
         modifier = modifier
