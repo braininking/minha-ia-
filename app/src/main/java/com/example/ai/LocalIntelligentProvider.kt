@@ -153,8 +153,9 @@ class LocalIntelligentProvider : AIProvider {
                 TaskStep(
                     index = 3,
                     actionType = ActionType.VERIFY_RESULT,
-                    description = "Verificar exibição dos resultados da pesquisa",
-                    targetLabel = query,
+                    description = "Confirmar que o navegador abriu a pesquisa",
+                    targetLabel = "Google Chrome",
+                    targetPackage = targetPkg,
                     requiresConfirmation = false
                 )
             )
@@ -196,6 +197,7 @@ class LocalIntelligentProvider : AIProvider {
                     actionType = ActionType.VERIFY_RESULT,
                     description = "Verificar se $appName está em primeiro plano",
                     targetLabel = appName,
+                    targetPackage = pkg,
                     requiresConfirmation = false
                 )
             )
@@ -213,15 +215,7 @@ class LocalIntelligentProvider : AIProvider {
                 requiresConfirmation = false
             )
         )
-        steps.add(
-            TaskStep(
-                index = 1,
-                actionType = ActionType.VERIFY_RESULT,
-                description = "Verificar conclusão da tarefa",
-                requiresConfirmation = false
-            )
-        )
-
+        // The generic fallback only opens a search; without a known target, do not invent verification.
         return Result.success(TaskPlan(goal = raw, steps = steps))
     }
 
