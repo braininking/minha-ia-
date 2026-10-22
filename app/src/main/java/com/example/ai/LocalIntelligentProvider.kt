@@ -117,15 +117,8 @@ class LocalIntelligentProvider : AIProvider {
                     requiresConfirmation = true // Mandatory review before sending!
                 )
             )
-            steps.add(
-                TaskStep(
-                    index = steps.size,
-                    actionType = ActionType.VERIFY_RESULT,
-                    description = "Verificar envio e status da conversa",
-                    targetLabel = "Status WhatsApp",
-                    requiresConfirmation = false
-                )
-            )
+            // Opening the share intent only prepares text; Android does not expose reliable
+            // confirmation that the recipient was selected or the message was sent.
 
             return Result.success(TaskPlan(goal = raw, steps = steps))
         }
