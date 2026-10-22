@@ -228,7 +228,8 @@ class ActionExecutor(private val context: Context) {
                     val stillInWhatsApp = after.packageName.equals(expectedPackage, ignoreCase = true)
                     val messageInConversation = after.visibleTexts.any { it == message } ||
                         after.visibleTexts.any { it.contains(message) }
-                    if (stillInWhatsApp && messageInConversation) {
+                    val draftStillInComposer = service.isTextPresentInEditableField(message)
+                    if (stillInWhatsApp && messageInConversation && !draftStillInComposer) {
                         step.status = StepStatus.COMPLETED
                         val msg = "O WhatsApp aceitou a ação de envio e o texto aparece na conversa de '$contact'. A entrega ao destinatário não foi confirmada."
                         step.resultMessage = msg
