@@ -149,6 +149,7 @@ class ExampleRobolectricTest {
         ).getOrThrow()
 
         assertTrue(plan.steps.any { it.actionType == ActionType.SEND_WHATSAPP_MESSAGE })
+        assertFalse(plan.steps.any { it.actionType == ActionType.ACCESSIBILITY_CLICK })
         assertFalse(plan.steps.any {
             it.actionType == ActionType.VERIFY_RESULT &&
                 it.targetLabel == "Status WhatsApp"
