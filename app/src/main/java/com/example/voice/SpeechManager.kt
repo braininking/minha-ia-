@@ -7,6 +7,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -50,6 +51,19 @@ class SpeechManager(private val context: Context) : TextToSpeech.OnInitListener 
                 // Fallback to default
                 textToSpeech?.setLanguage(Locale.getDefault())
             }
+            textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {
+                    _isSpeaking.value = true
+                }
+
+                override fun onDone(utteranceId: String?) {
+                    _isSpeaking.value = false
+                }
+
+                override fun onError(utteranceId: String?) {
+                    _isSpeaking.value = false
+                }
+            })
             isTtsInitialized = true
             Log.i(TAG, "TextToSpeech inicializado com sucesso.")
         }
@@ -158,7 +172,15 @@ class SpeechManager(private val context: Context) : TextToSpeech.OnInitListener 
             textToSpeech?.setSpeechRate(rate.coerceIn(0.5f, 2.0f))
             textToSpeech?.setPitch(pitch.coerceIn(0.5f, 2.0f))
             _isSpeaking.value = true
-            textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "gemini_tts_${System.currentTimeMillis()}")
+            val result = textToSpeech?.speak(
+                text,
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "gemini_tts_${System.currentTimeMillis()}"
+            )
+            if (result == TextToSpeech.ERROR) {
+                _isSpeaking.value = false
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Erro ao falar: ${e.message}")
         }

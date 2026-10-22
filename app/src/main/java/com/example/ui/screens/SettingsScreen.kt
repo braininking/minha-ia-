@@ -48,8 +48,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -64,6 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.accessibility.AppAccessibilityService
+import com.example.ai.GeminiProvider
 import com.example.data.SettingsRepository
 import com.example.data.local.AppDatabase
 import com.example.model.AutonomyLevel
@@ -82,6 +85,9 @@ import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.WarningAmber
 import com.example.voice.SpeechManager
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.launch
 
 @Composable
@@ -93,6 +99,16 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var resumeVersion by remember { mutableIntStateOf(0) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) resumeVersion++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val aiProvider by settingsRepository.aiProviderFlow.collectAsState(initial = "LOCAL_INTELLIGENT")
     val autonomyLevel by settingsRepository.autonomyLevelFlow.collectAsState(initial = AutonomyLevel.EQUILIBRADO)
@@ -103,7 +119,9 @@ fun SettingsScreen(
     val floatingBubbleEnabled by settingsRepository.floatingBubbleFlow.collectAsState(initial = false)
 
     var connectionTestResult by remember { mutableStateOf<String?>(null) }
-    val isAccessibilityActive = AppAccessibilityService.isServiceRunning()
+    val isAccessibilityActive = remember(resumeVersion) {
+        AppAccessibilityService.isAccessibilityEnabled(context)
+    }
 
     LazyColumn(
         modifier = modifier
@@ -173,10 +191,17 @@ fun SettingsScreen(
 
                 Button(
                     onClick = {
-                        connectionTestResult = if (aiProvider == "GEMINI_API") {
-                            "Conexão Gemini verificada. Operando com fallback seguro para Motor Local."
+                        if (aiProvider == "GEMINI_API") {
+                            connectionTestResult = "Testando conexão Gemini..."
+                            scope.launch {
+                                val result = GeminiProvider().testConnection()
+                                connectionTestResult = result.fold(
+                                    onSuccess = { it },
+                                    onFailure = { "Falha no Gemini: ${it.message ?: "erro desconhecido"}" }
+                                )
+                            }
                         } else {
-                            "Motor Local Inteligente 100% operacional no dispositivo."
+                            connectionTestResult = "Motor Local selecionado. Ele não depende de internet nem de chave de API."
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -191,7 +216,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = connectionTestResult ?: "",
-                        color = EmeraldGreen,
+                        color = if (connectionTestResult?.startsWith("Falha") == true) ErrorRed else EmeraldGreen,
                         fontSize = 12.sp,
                         lineHeight = 16.sp
                     )

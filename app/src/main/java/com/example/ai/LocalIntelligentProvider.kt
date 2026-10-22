@@ -67,65 +67,98 @@ class LocalIntelligentProvider : AIProvider {
             }
         }
 
-        // Scenario 1: WhatsApp message
-        // Ex: "Mande uma mensagem para o Marcos dizendo que chegarei às 18 horas"
-        // Ex: "Enviar mensagem no WhatsApp para Ana dizendo parabens"
-        if (lower.contains("whatsapp") || (lower.contains("mensagem") && lower.contains("dizendo"))) {
+        // Scenario 1: complete WhatsApp flow through Android Accessibility.
+        // The final SEND_WHATSAPP_MESSAGE step is gated by the planner's confirmation policy.
+        if (lower.contains("whatsapp") || lower.contains("mensagem")) {
             val contact = extractContact(raw)
             val messageText = extractMessageText(raw)
+            if (contact.isNullOrBlank() || messageText.isBlank()) {
+                return Result.failure(IllegalArgumentException(
+                    "Não consegui identificar com segurança o contato e o texto. Diga, por exemplo: envie uma mensagem para Mãe dizendo: Oi, tudo bom?"
+                ))
+            }
 
             val whatsappApp = findApp("whatsapp")
             val targetPkg = whatsappApp?.packageName ?: "com.whatsapp"
+            val normalizedContact = normalizeContactAlias(contact)
 
-            steps.add(
-                TaskStep(
-                    index = 0,
-                    actionType = ActionType.LAUNCH_APP,
-                    description = "Abrir o aplicativo WhatsApp",
-                    targetPackage = targetPkg,
-                    targetLabel = "WhatsApp",
-                    requiresConfirmation = false
-                )
-            )
-            steps.add(
-                TaskStep(
-                    index = 1,
-                    actionType = ActionType.WAIT_DELAY,
-                    description = "Aguardar carregamento da interface do WhatsApp",
-                    targetQuery = "1200",
-                    requiresConfirmation = false
-                )
-            )
-            if (!contact.isNullOrBlank()) {
-                steps.add(
-                    TaskStep(
-                        index = 2,
-                        actionType = ActionType.ACCESSIBILITY_CLICK,
-                        description = "Localizar e abrir conversa com '$contact'",
-                        targetLabel = contact,
-                        requiresConfirmation = false
-                    )
-                )
-            }
-            steps.add(
-                TaskStep(
-                    index = steps.size,
-                    actionType = ActionType.SEND_WHATSAPP_MESSAGE,
-                    description = "Preparar mensagem para '$contact': \"$messageText\"",
-                    targetLabel = contact,
-                    targetText = messageText,
-                    requiresConfirmation = true // Mandatory review before sending!
-                )
-            )
-            steps.add(
-                TaskStep(
-                    index = steps.size,
-                    actionType = ActionType.VERIFY_RESULT,
-                    description = "Verificar envio e status da conversa",
-                    targetLabel = "Status WhatsApp",
-                    requiresConfirmation = false
-                )
-            )
+            steps.add(TaskStep(
+                index = steps.size,
+                actionType = ActionType.LAUNCH_APP,
+                description = "Abrir o WhatsApp",
+                targetPackage = targetPkg,
+                targetLabel = "WhatsApp",
+                requiresConfirmation = false
+            ))
+            steps.add(TaskStep(
+                index = steps.size,
+                actionType = ActionType.WAIT_DELAY,
+                description = "Aguardar o WhatsApp abrir",
+                targetQuery = "1000",
+                requiresConfirmation = false
+            ))
+            steps.add(TaskStep(
+                index = steps.size,
+                actionType = ActionType.ACCESSIBILITY_CLICK,
+                description = "Abrir a busca de conversas",
+                targetLabel = "Nova conversa",
+                targetText = "New chat",
+                requiresConfirmation = false
+            ))
+            steps.add(TaskStep(
+                index = steps.size,
+                actionType = ActionType.WAIT_DELAY,
+                description = "Aguardar a lista de contatos",
+                targetQuery = "500",
+                requiresConfirmation = false
+            ))
+            steps.add(TaskStep(
+                index = steps.size,
+                actionType = ActionType.ACCESSIBILITY_INPUT,
+                description = "Pesquisar o contato $normalizedContact",
+                targetLabel = "Pesquisar",
+                targetText = normalizedContact,
+                requiresConfirmation = false
+            ))
+            steps.add(TaskStep(
+                index = steps.size,
+                actionType = ActionType.WAIT_DELAY,
+                description = "Aguardar os resultados do contato",
+                targetQuery = "800",
+                requiresConfirmation = false
+            ))
+            steps.add(TaskStep(
+                index = steps.size,
+                actionType = ActionType.ACCESSIBILITY_CLICK,
+                description = "Abrir a conversa de $normalizedContact",
+                targetLabel = normalizedContact,
+                targetText = normalizedContact,
+                requiresConfirmation = false
+            ))
+            steps.add(TaskStep(
+                index = steps.size,
+                actionType = ActionType.WAIT_DELAY,
+                description = "Aguardar a conversa abrir",
+                targetQuery = "500",
+                requiresConfirmation = false
+            ))
+            steps.add(TaskStep(
+                index = steps.size,
+                actionType = ActionType.ACCESSIBILITY_INPUT,
+                description = "Escrever a mensagem",
+                targetLabel = "Mensagem",
+                targetText = messageText,
+                requiresConfirmation = false
+            ))
+            steps.add(TaskStep(
+                index = steps.size,
+                actionType = ActionType.SEND_WHATSAPP_MESSAGE,
+                description = "Enviar mensagem para $normalizedContact",
+                targetPackage = targetPkg,
+                targetLabel = normalizedContact,
+                targetText = messageText,
+                requiresConfirmation = true
+            ))
 
             return Result.success(TaskPlan(goal = raw, steps = steps))
         }
@@ -169,8 +202,9 @@ class LocalIntelligentProvider : AIProvider {
                 TaskStep(
                     index = 3,
                     actionType = ActionType.VERIFY_RESULT,
-                    description = "Verificar exibição dos resultados da pesquisa",
-                    targetLabel = query,
+                    description = "Confirmar que o navegador abriu a pesquisa",
+                    targetLabel = "Google Chrome",
+                    targetPackage = targetPkg,
                     requiresConfirmation = false
                 )
             )
@@ -212,6 +246,7 @@ class LocalIntelligentProvider : AIProvider {
                     actionType = ActionType.VERIFY_RESULT,
                     description = "Verificar se $appName está em primeiro plano",
                     targetLabel = appName,
+                    targetPackage = pkg,
                     requiresConfirmation = false
                 )
             )
@@ -229,28 +264,40 @@ class LocalIntelligentProvider : AIProvider {
                 requiresConfirmation = false
             )
         )
-        steps.add(
-            TaskStep(
-                index = 1,
-                actionType = ActionType.VERIFY_RESULT,
-                description = "Verificar conclusão da tarefa",
-                requiresConfirmation = false
-            )
-        )
-
+        // The generic fallback only opens a search; without a known target, do not invent verification.
         return Result.success(TaskPlan(goal = raw, steps = steps))
     }
 
     private fun extractContact(raw: String): String? {
-        val regex = Regex("para\\s+(?:o\\s+|a\\s+)?([A-Za-zÀ-ÖØ-öø-ÿ]+)", RegexOption.IGNORE_CASE)
-        val match = regex.find(raw)
-        return match?.groupValues?.getOrNull(1)?.replaceFirstChar { it.uppercase() }
+        val patterns = listOf(
+            Regex("(?:para|pra)\\s+(?:o|a)\\s+(.+?)(?=\\s+(?:dizendo|falando|com a mensagem)|[,;:]|$)", RegexOption.IGNORE_CASE),
+            Regex("(?:para|pra)\\s+(.+?)(?=\\s+(?:dizendo|falando)|[,;:]|$)", RegexOption.IGNORE_CASE)
+        )
+        val match = patterns.firstNotNullOfOrNull { it.find(raw) } ?: return null
+        val candidate = match.groupValues.getOrNull(1)?.trim().orEmpty()
+        return candidate.removePrefix("\"").removeSuffix("\"")
+            .removePrefix("'").removeSuffix("'")
+            .takeIf { it.isNotBlank() }
+    }
+
+    private fun normalizeContactAlias(contact: String): String {
+        val clean = contact.trim().removePrefix("\"").removeSuffix("\"")
+            .removePrefix("'").removeSuffix("'")
+        return when (clean.lowercase(Locale.ROOT)) {
+            "minha mãe", "minha mae", "mamãe", "mae", "mãe", "mamá" -> "Mãe"
+            "meu pai", "pai" -> "Pai"
+            else -> clean.replaceFirstChar { it.titlecase(Locale.ROOT) }
+        }
     }
 
     private fun extractMessageText(raw: String): String {
-        val regex = Regex("dizendo\\s+(?:que\\s+)?(.+)", RegexOption.IGNORE_CASE)
-        val match = regex.find(raw)
-        return match?.groupValues?.getOrNull(1)?.trim() ?: "Olá! Mensagem enviada pelo assistente."
+        val quoted = Regex("[“”\\\"]([^“”\\\"]+)[“”\\\"]").find(raw)?.groupValues?.getOrNull(1)
+        if (!quoted.isNullOrBlank()) return quoted.trim()
+        val regex = Regex("(?:dizendo|falando)(?:\\s+que)?\\s*:?\\s*(.+)$", RegexOption.IGNORE_CASE)
+        val match = regex.find(raw) ?: return ""
+        val candidate = match.groupValues.getOrNull(1)?.trim().orEmpty()
+        return candidate.removePrefix("\"").removeSuffix("\"")
+            .removePrefix("'").removeSuffix("'")
     }
 
     private fun extractSearchQuery(raw: String): String {

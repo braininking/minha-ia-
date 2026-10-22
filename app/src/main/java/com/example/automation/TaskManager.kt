@@ -12,6 +12,7 @@ import com.example.data.local.AppDatabase
 import com.example.data.local.AuditEntity
 import com.example.data.local.ChatEntity
 import com.example.data.local.TaskEntity
+import com.example.model.ActionType
 import com.example.model.AssistantState
 import com.example.model.AutonomyLevel
 import com.example.model.InstalledAppInfo
@@ -209,15 +210,28 @@ class TaskManager(
             }
         }
 
-        // All steps completed!
+        // Completion reports what was actually observed, not guaranteed delivery.
         plan.status = TaskStatus.COMPLETED
         plan.finishedAt = System.currentTimeMillis()
         _activePlan.value = plan
         _assistantState.value = AssistantState.COMPLETED
-        _lastMessage.value = "Tarefa concluída com sucesso!"
+        val whatsappSend = plan.steps.firstOrNull { it.actionType == ActionType.SEND_WHATSAPP_MESSAGE }
+        val whatsappSentAction = whatsappSend?.status == StepStatus.COMPLETED
+        val completionMessage = when {
+            whatsappSend == null -> "Tarefa concluída com sucesso!"
+            whatsappSentAction -> "A ação de envio foi executada e a mensagem aparece na conversa. A entrega ao destinatário não foi confirmada."
+            else -> "O texto foi preparado, mas o envio não foi confirmado."
+        }
+        _lastMessage.value = completionMessage
         persistTask(plan)
-        recordAudit("COMPLETED", plan.goal, "Todas as ${plan.steps.size} etapas executadas com êxito", "SUCCESS", plan.id)
-        recordAssistantChat("Tarefa concluída com sucesso! Todas as ${plan.steps.size} etapas foram executadas.", plan.id, "Concluída")
+        val auditMessage = when {
+            whatsappSend == null -> "Todas as ${plan.steps.size} etapas executadas com êxito."
+            whatsappSentAction -> "Ação de envio observada; entrega ao destinatário não confirmada."
+            else -> "Preparação concluída; envio não confirmado."
+        }
+        val auditLevel = if (whatsappSend == null) "SUCCESS" else "WARN"
+        recordAudit("COMPLETED", plan.goal, auditMessage, auditLevel, plan.id)
+        recordAssistantChat(completionMessage, plan.id, if (whatsappSend == null) "Concluída" else "WhatsApp")
     }
 
     fun approveStep() {

@@ -94,7 +94,7 @@ class ActionExecutor(private val context: Context) {
                 }
 
                 ActionType.WAIT_DELAY -> {
-                    val millis = step.targetQuery?.toLongOrNull() ?: 1200L
+                    val millis = (step.targetQuery?.toLongOrNull() ?: 1200L).coerceIn(0L, 10_000L)
                     val checkInterval = 200L
                     var elapsed = 0L
                     while (elapsed < millis) {
@@ -183,65 +183,96 @@ class ActionExecutor(private val context: Context) {
                 }
 
                 ActionType.SEND_WHATSAPP_MESSAGE -> {
-                    val message = step.targetText ?: ""
-                    val contact = step.targetLabel ?: ""
+                    val message = step.targetText?.trim().orEmpty()
+                    val contact = step.targetLabel?.trim().orEmpty()
+                    val expectedPackage = step.targetPackage?.trim().orEmpty()
+                    val service = AppAccessibilityService.getInstance()
 
-                    // Open WhatsApp sharing intent with text pre-filled
-                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, message)
-                        setPackage("com.whatsapp")
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    if (message.isBlank() || contact.isBlank() || expectedPackage != "com.whatsapp") {
+                        val error = "Envio bloqueado: mensagem, contato ou pacote do WhatsApp inválido."
+                        step.status = StepStatus.FAILED
+                        step.resultMessage = error
+                        return@withContext StepExecutionResult.Failure(error)
+                    }
+                    if (service == null) {
+                        val error = "Serviço de Acessibilidade inativo. Não foi possível verificar a conversa antes do envio."
+                        step.status = StepStatus.FAILED
+                        step.resultMessage = error
+                        return@withContext StepExecutionResult.Failure(error)
                     }
 
-                    try {
-                        context.startActivity(sendIntent)
+                    val before = service.getCurrentScreenSummary()
+                    val inWhatsApp = before.packageName.equals(expectedPackage, ignoreCase = true)
+                    val contactVisible = before.visibleTexts.any { it.equals(contact, ignoreCase = true) }
+                    val messageVisible = before.visibleTexts.any { it == message } ||
+                        before.visibleTexts.any { it.contains(message) }
+
+                    if (!inWhatsApp || !contactVisible || !messageVisible) {
+                        val error = "Envio bloqueado: não consegui confirmar que a conversa de '$contact' está aberta e que o texto completo está preparado. Nenhuma mensagem foi enviada."
+                        step.status = StepStatus.FAILED
+                        step.resultMessage = error
+                        return@withContext StepExecutionResult.Failure(error)
+                    }
+
+                    // Only tap the visible WhatsApp send control after validating app, recipient, and draft.
+                    val clicked = service.clickElementByText("Enviar") || service.clickElementByText("Send")
+                    if (!clicked) {
+                        val error = "Não encontrei o botão de envio do WhatsApp. A mensagem não foi enviada."
+                        step.status = StepStatus.FAILED
+                        step.resultMessage = error
+                        return@withContext StepExecutionResult.Failure(error)
+                    }
+
+                    delay(900)
+                    val after = service.getCurrentScreenSummary()
+                    val stillInWhatsApp = after.packageName.equals(expectedPackage, ignoreCase = true)
+                    val messageInConversation = after.visibleTexts.any { it == message } ||
+                        after.visibleTexts.any { it.contains(message) }
+                    val draftStillInComposer = service.isTextPresentInEditableField(message)
+                    if (stillInWhatsApp && messageInConversation && !draftStillInComposer) {
                         step.status = StepStatus.COMPLETED
-                        val msg = "WhatsApp aberto com texto preparado para $contact: \"$message\""
+                        val msg = "O WhatsApp aceitou a ação de envio e o texto aparece na conversa de '$contact'. A entrega ao destinatário não foi confirmada."
                         step.resultMessage = msg
                         StepExecutionResult.Success(msg)
-                    } catch (e: Exception) {
-                        // Fallback generic send
-                        val genericIntent = Intent(Intent.ACTION_VIEW).apply {
-                            val encoded = URLEncoder.encode(message, "UTF-8")
-                            data = Uri.parse("https://api.whatsapp.com/send?text=$encoded")
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        try {
-                            context.startActivity(genericIntent)
-                            step.status = StepStatus.COMPLETED
-                            val msg = "WhatsApp web intent preparado com sucesso."
-                            step.resultMessage = msg
-                            StepExecutionResult.Success(msg)
-                        } catch (err: Exception) {
-                            val error = "WhatsApp não está instalado ou disponível neste aparelho."
-                            step.status = StepStatus.FAILED
-                            step.resultMessage = error
-                            StepExecutionResult.Failure(error)
-                        }
+                    } else {
+                        val error = "O botão foi acionado, mas não consegui verificar a mensagem na conversa. Confira o WhatsApp antes de tentar novamente."
+                        step.status = StepStatus.FAILED
+                        step.resultMessage = error
+                        StepExecutionResult.Failure(error)
                     }
                 }
 
                 ActionType.VERIFY_RESULT -> {
                     val service = AppAccessibilityService.getInstance()
                     val screenInfo = service?.getCurrentScreenSummary()
-                    val target = step.targetLabel ?: ""
+                    val target = step.targetLabel?.trim().orEmpty()
+                    val expectedPackage = step.targetPackage?.trim().orEmpty()
 
-                    val verified = if (target.isNotBlank() && screenInfo != null) {
+                    val labelMatched = target.isNotBlank() && screenInfo != null && (
                         screenInfo.visibleTexts.any { it.contains(target, ignoreCase = true) } ||
-                                screenInfo.packageName?.contains(target, ignoreCase = true) == true
-                    } else {
-                        true
-                    }
+                            screenInfo.packageName?.contains(target, ignoreCase = true) == true
+                    )
+                    val packageMatched = expectedPackage.isNotBlank() && screenInfo?.packageName
+                        ?.equals(expectedPackage, ignoreCase = true) == true
+                    val verified = labelMatched || packageMatched
 
-                    step.status = StepStatus.COMPLETED
-                    val msg = if (verified) {
-                        "Verificação concluída: tela respondeu conforme esperado."
+                    if (verified) {
+                        step.status = StepStatus.COMPLETED
+                        val verifiedTarget = target.ifBlank { expectedPackage }
+                        val msg = "Verificação concluída: '$verifiedTarget' foi confirmado na tela atual."
+                        step.resultMessage = msg
+                        StepExecutionResult.Success(msg)
                     } else {
-                        "Verificação visual concluída (alvo '$target' aguardando renderização total)."
+                        val error = if (target.isBlank() && expectedPackage.isBlank()) {
+                            "Não foi possível verificar o resultado: nenhum rótulo ou pacote esperado foi definido."
+                        } else {
+                            val expected = listOf(target, expectedPackage).filter { it.isNotBlank() }.joinToString(" / ")
+                            "Não foi possível confirmar '$expected' na tela atual. Nenhum sucesso foi presumido."
+                        }
+                        step.status = StepStatus.FAILED
+                        step.resultMessage = error
+                        StepExecutionResult.Failure(error)
                     }
-                    step.resultMessage = msg
-                    StepExecutionResult.Success(msg)
                 }
             }
         } catch (e: CancellationException) {

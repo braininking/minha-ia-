@@ -7,6 +7,8 @@ import com.example.ai.LocalIntelligentProvider
 import com.example.model.ActionType
 import com.example.model.AutonomyLevel
 import com.example.model.InstalledAppInfo
+import com.example.model.TaskPlan
+import com.example.model.TaskStep
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -39,6 +41,9 @@ class ExampleRobolectricTest {
         val plan = result.getOrThrow()
         assertTrue(plan.steps.any { it.actionType == ActionType.LAUNCH_APP })
         assertTrue(plan.steps.any { it.actionType == ActionType.SEARCH_WEB })
+        val verification = plan.steps.firstOrNull { it.actionType == ActionType.VERIFY_RESULT }
+        assertNotNull(verification)
+        assertEquals("com.android.chrome", verification!!.targetPackage)
     }
 
     @Test
@@ -52,11 +57,12 @@ class ExampleRobolectricTest {
         assertTrue(rawResult.isSuccess)
         val rawPlan = rawResult.getOrThrow()
 
-        // Test Equilibrado autonomy: WhatsApp send requires confirmation
+        // A clear spoken send command authorizes the final action; the executor still
+        // verifies the exact conversation and the complete draft before tapping Send.
         val validated = planner.validateAndApplyPolicy(rawPlan, AutonomyLevel.EQUILIBRADO).getOrThrow()
         val sendStep = validated.steps.firstOrNull { it.actionType == ActionType.SEND_WHATSAPP_MESSAGE }
         assertNotNull(sendStep)
-        assertTrue("No modo equilibrado o envio de mensagem deve exigir confirmação", sendStep!!.requiresConfirmation)
+        assertFalse("O comando falado explícito deve permitir envio automático após as verificações", sendStep!!.requiresConfirmation)
     }
 
     @Test
@@ -69,4 +75,107 @@ class ExampleRobolectricTest {
         val launchStep = validated.steps.first { it.actionType == ActionType.LAUNCH_APP }
         assertTrue("No modo conservador a abertura de app deve exigir confirmação", launchStep.requiresConfirmation)
     }
+
+    @Test
+    fun balancedAutonomyRequiresApprovalForPotentiallySensitiveUiActions() {
+        val plan = TaskPlan(
+            goal = "Preencher e confirmar formulário",
+            steps = mutableListOf(
+                TaskStep(
+                    index = 0,
+                    actionType = ActionType.ACCESSIBILITY_INPUT,
+                    description = "Preencher campo",
+                    targetText = "dados",
+                    requiresConfirmation = false
+                ),
+                TaskStep(
+                    index = 1,
+                    actionType = ActionType.ACCESSIBILITY_CLICK,
+                    description = "Clicar em enviar",
+                    targetLabel = "Enviar",
+                    requiresConfirmation = false
+                )
+            )
+        )
+
+        val validated = AIPlanner()
+            .validateAndApplyPolicy(plan, AutonomyLevel.EQUILIBRADO)
+            .getOrThrow()
+
+        assertTrue(validated.steps.all { it.requiresConfirmation })
+    }
+
+    @Test
+    fun advancedAutonomyCannotBypassSensitiveActionConfirmations() {
+        val plan = TaskPlan(
+            goal = "Preparar mensagem",
+            steps = mutableListOf(
+                TaskStep(
+                    index = 0,
+                    actionType = ActionType.SEND_WHATSAPP_MESSAGE,
+                    description = "Preparar mensagem",
+                    targetText = "Olá",
+                    requiresConfirmation = false
+                )
+            )
+        )
+
+        val validated = AIPlanner()
+            .validateAndApplyPolicy(plan, AutonomyLevel.AVANCADO)
+            .getOrThrow()
+
+        assertTrue(validated.steps.single().requiresConfirmation)
+    }
+
+    @Test
+    fun plannerRejectsLaunchWithoutPackage() {
+        val plan = TaskPlan(
+            goal = "Abrir aplicativo",
+            steps = mutableListOf(
+                TaskStep(
+                    index = 0,
+                    actionType = ActionType.LAUNCH_APP,
+                    description = "Abrir aplicativo sem pacote"
+                )
+            )
+        )
+
+        assertTrue(AIPlanner().validateAndApplyPolicy(plan, AutonomyLevel.EQUILIBRADO).isFailure)
+    }
+
+    @Test
+    fun localWhatsAppPlanDoesNotClaimItCanVerifyMessageDelivery() = runBlocking {
+        val provider = LocalIntelligentProvider()
+        val plan = provider.planTask(
+            "Mande uma mensagem para Marcos dizendo que cheguei",
+            listOf(InstalledAppInfo("WhatsApp", "com.whatsapp")),
+            null
+        ).getOrThrow()
+
+        assertTrue(plan.steps.any { it.actionType == ActionType.SEND_WHATSAPP_MESSAGE })
+        assertTrue(plan.steps.any { it.actionType == ActionType.ACCESSIBILITY_CLICK })
+        assertTrue(plan.steps.any { it.actionType == ActionType.ACCESSIBILITY_INPUT })
+        assertFalse(plan.steps.any {
+            it.actionType == ActionType.VERIFY_RESULT &&
+                it.targetLabel == "Status WhatsApp"
+        })
+    }
+
+    @Test
+    fun parsesNaturalPortugueseWhatsAppCommandForMother() = runBlocking {
+        val provider = LocalIntelligentProvider()
+        val plan = provider.planTask(
+            "Abra o WhatsApp e envie mensagem pra minha mãe, falando: \"Oi mãe, tudo bom?\"",
+            listOf(InstalledAppInfo("WhatsApp", "com.whatsapp")),
+            null
+        ).getOrThrow()
+
+        val search = plan.steps.first { it.actionType == ActionType.ACCESSIBILITY_INPUT }
+        val message = plan.steps.first { it.actionType == ActionType.SEND_WHATSAPP_MESSAGE }
+        assertEquals("Mãe", search.targetText)
+        assertEquals("Mãe", message.targetLabel)
+        assertEquals("Oi mãe, tudo bom?", message.targetText)
+        assertEquals(ActionType.SEND_WHATSAPP_MESSAGE, plan.steps.last().actionType)
+    }
+
 }
