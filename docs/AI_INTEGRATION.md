@@ -18,3 +18,5 @@ O aplicativo possui uma camada intercambiável de IA baseada na interface `AIPro
 - O planejador local aplica a política de confirmação independentemente do que o modelo Gemini solicitar. Cliques, preenchimento de campos e preparação de mensagens exigem confirmação nos modos Equilibrado e Avançado.
 - O contexto enviado ao Gemini para planejar tarefas inclui o comando, o catálogo limitado de apps e o pacote atual da tela; o texto visível da tela não é enviado.
 - Nenhuma chave de API é gravada no banco de dados local ou exibida em texto simples.
+
+> **Aviso de segurança:** como a integração atual chama a API diretamente do Android, uma chave incluída no BuildConfig/APK pode ser extraída do aplicativo. Use uma chave restrita e com limites de cota apenas para testes/uso pessoal. Antes de distribuir o app a terceiros, migre as chamadas Gemini para um backend e mantenha a chave somente no servidor.
