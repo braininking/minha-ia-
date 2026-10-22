@@ -62,7 +62,7 @@ class AIPlanner {
                         step.actionType != ActionType.VERIFY_RESULT
                 AutonomyLevel.EQUILIBRADO, AutonomyLevel.AVANCADO -> {
                     // In a WhatsApp workflow, allow navigation and typing to proceed hands-free.
-                    // The final send action always pauses for explicit approval.
+                    // The final send action runs only after runtime checks pass.
                     if (isWhatsAppFlow) {
                         // The spoken command explicitly requests sending; the executor only
                         // sends after verifying the exact conversation and the complete draft.
