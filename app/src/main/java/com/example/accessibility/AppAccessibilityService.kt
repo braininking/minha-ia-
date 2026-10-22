@@ -174,6 +174,24 @@ class AppAccessibilityService : AccessibilityService() {
         return nodeToUse.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
     }
 
+    fun isTextPresentInEditableField(expectedText: String): Boolean {
+        val root = rootInActiveWindow ?: return false
+        var found = false
+        fun search(node: AccessibilityNodeInfo?) {
+            if (node == null || found) return
+            val text = node.text?.toString().orEmpty()
+            if ((node.isEditable || node.className?.contains("EditText") == true) &&
+                text == expectedText
+            ) {
+                found = true
+                return
+            }
+            for (i in 0 until node.childCount) search(node.getChild(i))
+        }
+        search(root)
+        return found
+    }
+
     fun scrollWindow(forward: Boolean): Boolean {
         val root = rootInActiveWindow ?: return false
         val action = if (forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
