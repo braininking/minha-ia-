@@ -41,6 +41,9 @@ class ExampleRobolectricTest {
         val plan = result.getOrThrow()
         assertTrue(plan.steps.any { it.actionType == ActionType.LAUNCH_APP })
         assertTrue(plan.steps.any { it.actionType == ActionType.SEARCH_WEB })
+        val verification = plan.steps.firstOrNull { it.actionType == ActionType.VERIFY_RESULT }
+        assertNotNull(verification)
+        assertEquals("com.android.chrome", verification!!.targetPackage)
     }
 
     @Test
