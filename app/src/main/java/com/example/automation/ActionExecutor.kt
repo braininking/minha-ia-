@@ -226,23 +226,29 @@ class ActionExecutor(private val context: Context) {
                 ActionType.VERIFY_RESULT -> {
                     val service = AppAccessibilityService.getInstance()
                     val screenInfo = service?.getCurrentScreenSummary()
-                    val target = step.targetLabel ?: ""
+                    val target = step.targetLabel?.trim().orEmpty()
+                    val expectedPackage = step.targetPackage?.trim().orEmpty()
 
-                    val verified = target.isNotBlank() && screenInfo != null && (
+                    val labelMatched = target.isNotBlank() && screenInfo != null && (
                         screenInfo.visibleTexts.any { it.contains(target, ignoreCase = true) } ||
                             screenInfo.packageName?.contains(target, ignoreCase = true) == true
                     )
+                    val packageMatched = expectedPackage.isNotBlank() && screenInfo?.packageName
+                        ?.equals(expectedPackage, ignoreCase = true) == true
+                    val verified = labelMatched || packageMatched
 
                     if (verified) {
                         step.status = StepStatus.COMPLETED
-                        val msg = "Verificação concluída: o alvo '$target' foi encontrado na tela atual."
+                        val verifiedTarget = target.ifBlank { expectedPackage }
+                        val msg = "Verificação concluída: '$verifiedTarget' foi confirmado na tela atual."
                         step.resultMessage = msg
                         StepExecutionResult.Success(msg)
                     } else {
-                        val error = if (target.isBlank()) {
-                            "Não foi possível verificar o resultado: nenhum alvo de verificação foi definido."
+                        val error = if (target.isBlank() && expectedPackage.isBlank()) {
+                            "Não foi possível verificar o resultado: nenhum rótulo ou pacote esperado foi definido."
                         } else {
-                            "Não foi possível confirmar o alvo '$target' na tela atual. Nenhum sucesso foi presumido."
+                            val expected = listOf(target, expectedPackage).filter { it.isNotBlank() }.joinToString(" / ")
+                            "Não foi possível confirmar '$expected' na tela atual. Nenhum sucesso foi presumido."
                         }
                         step.status = StepStatus.FAILED
                         step.resultMessage = error
