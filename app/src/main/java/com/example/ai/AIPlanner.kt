@@ -55,7 +55,10 @@ class AIPlanner {
             }
 
             // Policy is enforced locally; a model-generated plan cannot lower these safeguards.
-            val isWhatsAppFlow = plan.steps.any { it.actionType == ActionType.SEND_WHATSAPP_MESSAGE }
+            val explicitSendIntent = Regex("\\b(envie|envia|enviar|mande|manda|mandar|send)\\b", RegexOption.IGNORE_CASE)
+                .containsMatchIn(plan.goal)
+            val isWhatsAppFlow = explicitSendIntent &&
+                plan.steps.any { it.actionType == ActionType.SEND_WHATSAPP_MESSAGE }
             step.requiresConfirmation = when (autonomyLevel) {
                 AutonomyLevel.CONSERVADOR ->
                     step.actionType != ActionType.WAIT_DELAY &&
