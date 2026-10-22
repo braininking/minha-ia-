@@ -55,14 +55,20 @@ class AIPlanner {
             }
 
             // Policy is enforced locally; a model-generated plan cannot lower these safeguards.
+            val isWhatsAppFlow = plan.steps.any { it.actionType == ActionType.SEND_WHATSAPP_MESSAGE }
             step.requiresConfirmation = when (autonomyLevel) {
                 AutonomyLevel.CONSERVADOR ->
                     step.actionType != ActionType.WAIT_DELAY &&
                         step.actionType != ActionType.VERIFY_RESULT
-                AutonomyLevel.EQUILIBRADO ->
-                    step.actionType in ALWAYS_CONFIRM_ACTIONS
-                AutonomyLevel.AVANCADO ->
-                    step.actionType in ALWAYS_CONFIRM_ACTIONS
+                AutonomyLevel.EQUILIBRADO, AutonomyLevel.AVANCADO -> {
+                    // In a WhatsApp workflow, allow navigation and typing to proceed hands-free.
+                    // The final send action always pauses for explicit approval.
+                    if (isWhatsAppFlow) {
+                        step.actionType == ActionType.SEND_WHATSAPP_MESSAGE
+                    } else {
+                        step.actionType in ALWAYS_CONFIRM_ACTIONS
+                    }
+                }
             }
         }
 
